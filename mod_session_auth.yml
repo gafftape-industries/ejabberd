@@ -1,0 +1,68 @@
+# ejabberd.yml configuration snippet for ejabberd_auth_session
+
+# 1. Add session as an authentication method
+auth_method: session
+
+# 2. Configure the module
+modules:
+  ejabberd_auth_session:
+    # Base URL of your authentication API (required)
+    # The module appends /validate, /register, and /unregister to this URL
+    api_url: "http://localhost:3000"
+
+    # Timeout for API requests in milliseconds (optional, default: 5000)
+    timeout: 2000
+
+    # MUC domain for auto-joining rooms (optional, default: conference.domain)
+    # Room names from API are combined with this domain
+    muc_domain: "conference.example.com"
+
+# 3. Example multi-host configuration
+# hosts:
+#   - "example.com"
+#   - "chat.example.com"
+#
+# host_config:
+#   "example.com":
+#     auth_method: session
+#     modules:
+#       ejabberd_auth_session:
+#         api_url: "https://api.example.com/auth"
+#         muc_domain: "conference.example.com"
+#
+#   "chat.example.com":
+#     auth_method: session
+#     modules:
+#       ejabberd_auth_session:
+#         api_url: "https://api2.example.com/auth"
+#         muc_domain: "conference.chat.example.com"
+
+# API Endpoints:
+#
+# POST {api_url}/validate
+#   Request:  {"sessionID": "xxx", "user": "username"}
+#   Response: 200 OK with JSON body: {"room": "room-name"}
+#   Note: Room name will be sanitized (alphanumeric, hyphens, underscores only, max 64 chars)
+#         Empty room names after sanitization will cause session termination
+#
+# POST {api_url}/register
+#   Request:  {"sessionID": "xxx", "jid": "user@domain"}
+#   Response: 200 OK (registered successfully)
+#
+# POST {api_url}/unregister
+#   Request:  {"sessionID": "xxx", "jid": "user@domain"}
+#   Response: 200 OK (unregistered successfully)
+
+# Client authentication flow:
+# 1. Client authenticates with username and sessionID (as password)
+# 2. Server validates sessionID via /validate endpoint
+# 3. Server receives room name from API response
+# 4. Room name is sanitized and user is registered via /register
+# 5. User is auto-joined to room@muc_domain
+# 6. If any step fails (API error, MUC join failure), session is terminated
+#
+# Example:
+# Username: alice
+# Password: <sessionID from your backend>
+# API returns: {"room": "lobby"}
+# User joins: lobby@conference.example.com/alice

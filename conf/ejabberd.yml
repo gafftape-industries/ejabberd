@@ -1,0 +1,108 @@
+###
+###              Minimal ejabberd configuration for Gafftape Industries
+###
+### This is a minimal configuration that includes ONLY:
+### - MUC (Multi-User Chat)
+### - OMEMO encryption support
+### - Custom authentication (ejabberd_auth_session)
+### - Custom message filtering (mod_group_filter)
+###
+### See MODULES_REMOVED.md for excluded modules and functionality
+###
+
+hosts:
+  - localhost
+
+loglevel: info
+
+## Database configuration - using SQLite for MAM
+sql_type: sqlite
+sql_database: /opt/ejabberd/database/ejabberd.db
+
+## Client connection listener (C2S)
+listen:
+  -
+    port: 5222
+    ip: "::"
+    module: ejabberd_c2s
+    max_stanza_size: 262144
+    shaper: c2s_shaper
+    access: c2s
+
+## Access control
+acl:
+  local:
+    user_regexp: ""
+  loopback:
+    ip:
+      - 127.0.0.0/8
+      - ::1/128
+
+access_rules:
+  local:
+    allow: local
+  c2s:
+    allow: all
+  muc_create:
+    allow: local
+
+shaper_rules:
+  c2s_shaper:
+    none: admin
+    normal: all
+
+shaper:
+  normal:
+    rate: 3000
+    burst_size: 20000
+
+## Authentication
+auth_method: session
+
+## Modules - MINIMAL SET ONLY
+modules:
+  ## Custom Gafftape modules
+  ejabberd_auth_session:
+    api_url: "http://localhost:3000"
+    timeout: 2000
+    muc_domain: "conference.localhost"
+
+  mod_group_filter:
+    api_url: "http://localhost:3000/check-messaging-permission"
+    timeout: 500
+    cache_ttl: 30
+
+  ## MUC (Multi-User Chat)
+  mod_muc:
+    access:
+      - allow
+    access_create: muc_create
+    access_persistent: muc_create
+    default_room_options:
+      mam: true
+      persistent: false
+
+  ## OMEMO encryption support (XEP-0384)
+  mod_pubsub:
+    plugins:
+      - flat
+      - pep  # Required for OMEMO device lists and key bundles
+    force_node_config:
+      ## Prevent accidental public bookmarks
+      storage:bookmarks:
+        access_model: whitelist
+
+  ## Entity Capabilities (required for OMEMO)
+  mod_caps: {}
+
+  ## Message Carbons (multi-device sync)
+  mod_carboncopy: {}
+
+  ## Message Archive Management (for offline OMEMO messages)
+  mod_mam:
+    db_type: sql
+    assume_mam_usage: true
+    default: always
+
+  ## Service Discovery (required)
+  mod_disco: {}

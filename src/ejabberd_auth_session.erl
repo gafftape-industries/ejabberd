@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% File    : mod_session_auth.erl
+%%% File    : ejabberd_auth_session.erl
 %%% Author  : Custom
 %%% Purpose : Session-based authentication with external API
 %%% Created : 2025
@@ -22,19 +22,19 @@
 %%% 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 %%%
 %%%-------------------------------------------------------------------
--module(mod_session_auth).
+-module(ejabberd_auth_session).
 
 -author('custom').
 
--behaviour(gen_mod).
 -behaviour(ejabberd_auth).
-
-%% gen_mod callbacks
--export([start/2, stop/1, reload/3, mod_doc/0,
-         depends/2, mod_opt_type/1, mod_options/1]).
+-behaviour(gen_mod).
 
 %% ejabberd_auth callbacks
--export([check_password/4, user_exists/2, store_type/1, plain_password_required/1]).
+-export([start/1, stop/1, reload/1, check_password/4, user_exists/2,
+         store_type/1, plain_password_required/1]).
+
+%% gen_mod callbacks (for configuration)
+-export([start/2, stop/1, mod_opt_type/1, mod_options/1, mod_doc/0, depends/2]).
 
 %% Hook handlers
 -export([on_user_available/2, on_user_unavailable/2]).
@@ -46,35 +46,50 @@
 -define(SESSION_TABLE, mod_session_auth_sessions).
 
 %%%===================================================================
-%%% gen_mod callbacks
+%%% ejabberd_auth callbacks
 %%%===================================================================
 
-start(Host, _Opts) ->
+%% Called by ejabberd_auth when auth_method includes this backend
+start(Host) ->
     %% Initialize HTTP client
     application:ensure_all_started(hackney),
 
-    %% Create ETS table to store sessionID mappings
-    ets:new(?SESSION_TABLE, [named_table, public, set, {read_concurrency, true}]),
-
-    %% Register as auth backend
-    ejabberd_auth:register_backend(Host, ?MODULE),
+    %% Create ETS table to store sessionID mappings (if not exists)
+    case ets:whereis(?SESSION_TABLE) of
+        undefined ->
+            ets:new(?SESSION_TABLE, [named_table, public, set, {read_concurrency, true}]);
+        _ ->
+            ok
+    end,
 
     %% Register hooks
-    {ok, [
-        {hook, user_available, on_user_available, 50},
-        {hook, user_unavailable, on_user_unavailable, 50}
-    ]}.
+    ejabberd_hooks:add(user_available, Host, ?MODULE, on_user_available, 50),
+    ejabberd_hooks:add(user_unavailable, Host, ?MODULE, on_user_unavailable, 50),
+    ok.
 
 stop(Host) ->
-    %% Unregister auth backend
-    ejabberd_auth:unregister_backend(Host, ?MODULE),
+    %% Unregister hooks
+    ejabberd_hooks:delete(user_available, Host, ?MODULE, on_user_available, 50),
+    ejabberd_hooks:delete(user_unavailable, Host, ?MODULE, on_user_unavailable, 50),
 
     %% Clean up ETS table
     catch ets:delete(?SESSION_TABLE),
     ok.
 
-reload(_Host, _NewOpts, _OldOpts) ->
+reload(_Host) ->
     ok.
+
+%%%===================================================================
+%%% gen_mod callbacks (for module configuration)
+%%%===================================================================
+
+%% Called when module is loaded from modules section
+start(Host, _Opts) ->
+    %% When loaded as a module, also initialize as auth backend
+    start(Host),
+    ok.
+
+%% Note: stop/1 is shared between gen_mod and ejabberd_auth
 
 %%%===================================================================
 %%% ejabberd_auth callbacks
@@ -84,8 +99,8 @@ reload(_Host, _NewOpts, _OldOpts) ->
 check_password(User, _AuthzId, Server, Password) ->
     %% Password is the sessionID
     SessionID = Password,
-    ApiUrl = mod_session_auth_opt:api_url(Server),
-    Timeout = mod_session_auth_opt:timeout(Server),
+    ApiUrl = gen_mod:get_module_opt(Server, ?MODULE, api_url),
+    Timeout = gen_mod:get_module_opt(Server, ?MODULE, timeout),
 
     ValidateUrl = <<ApiUrl/binary, "/validate">>,
 
@@ -213,8 +228,8 @@ sanitize_room_name(RoomName) ->
 
 -spec register_session(binary(), binary(), binary()) -> ok | error.
 register_session(User, Server, SessionID) ->
-    ApiUrl = mod_session_auth_opt:api_url(Server),
-    Timeout = mod_session_auth_opt:timeout(Server),
+    ApiUrl = gen_mod:get_module_opt(Server, ?MODULE, api_url),
+    Timeout = gen_mod:get_module_opt(Server, ?MODULE, timeout),
 
     RegisterUrl = <<ApiUrl/binary, "/register">>,
     JID = jid:encode({User, Server, <<>>}),
@@ -245,8 +260,8 @@ register_session(User, Server, SessionID) ->
 
 -spec unregister_session(binary(), binary(), binary()) -> ok | error.
 unregister_session(User, Server, SessionID) ->
-    ApiUrl = mod_session_auth_opt:api_url(Server),
-    Timeout = mod_session_auth_opt:timeout(Server),
+    ApiUrl = gen_mod:get_module_opt(Server, ?MODULE, api_url),
+    Timeout = gen_mod:get_module_opt(Server, ?MODULE, timeout),
 
     UnregisterUrl = <<ApiUrl/binary, "/unregister">>,
     JID = jid:encode({User, Server, <<>>}),
@@ -278,7 +293,7 @@ unregister_session(User, Server, SessionID) ->
 %% Auto-join user to MUC room
 -spec auto_join_muc(binary(), binary(), binary(), binary()) -> ok | error.
 auto_join_muc(User, Server, Resource, RoomName) ->
-    MucDomain = mod_session_auth_opt:muc_domain(Server),
+    MucDomain = gen_mod:get_module_opt(Server, ?MODULE, muc_domain),
 
     %% Validate room name is not empty after sanitization
     case RoomName of

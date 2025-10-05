@@ -26,16 +26,16 @@ modules:
 
 ---
 
-## mod_session_auth
+## ejabberd_auth_session
 
 Session-based auth with API-assigned MUC rooms. Terminates session on any error.
 
 **Config:**
 ```yaml
-auth_method: mod_session_auth
+auth_method: session
 
 modules:
-  mod_session_auth:
+  ejabberd_auth_session:
     api_url: "http://localhost:3000"
     timeout: 5000                        # milliseconds
     muc_domain: "conference.example.com"
@@ -68,10 +68,10 @@ modules:
 ## Combined Example
 
 ```yaml
-auth_method: mod_session_auth
+auth_method: session
 
 modules:
-  mod_session_auth:
+  ejabberd_auth_session:
     api_url: "https://api.example.com/auth"
     timeout: 2000
     muc_domain: "conference.example.com"

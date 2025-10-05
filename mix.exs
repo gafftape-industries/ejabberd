@@ -122,6 +122,7 @@ defmodule Ejabberd.MixProject do
      {:fast_tls, "~> 1.1.24"},
      {:fast_xml, "~> 1.1.56"},
      {:fast_yaml, "~> 1.0"},
+     {:hackney, "~> 1.20.1"},
      {:idna, "~> 6.0"},
      {:mqtree, "~> 1.0"},
      {:p1_acme, ">= 1.0.28"},
